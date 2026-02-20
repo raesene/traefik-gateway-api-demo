@@ -71,7 +71,7 @@ Kubernetes API for Gateway API objects and builds its internal routing table:
 ```
 
 Traefik does **not** use kube-proxy or ClusterIP VIPs to reach backends. It
-watches `Endpoints` (or `EndpointSlices`) directly and load-balances across
+watches `EndpointSlices` directly and load-balances across
 individual pod IPs using its own connection pool.
 
 The same process applies to `whoami-path` (two rules in one HTTPRoute) and
@@ -113,7 +113,7 @@ Step 5 — Traefik receives the HTTP request
 Step 6 — Traefik selects a backend pod
   The HTTPRoute points to Service whoami-v1. Traefik has already resolved
   this to the two pod IPs (e.g. 10.244.0.5 and 10.244.0.9) by watching
-  Endpoints directly. It round-robins between them.
+  EndpointSlices directly. It round-robins between them.
   Traefik opens a new TCP connection directly to the chosen pod IP:80,
   bypassing kube-proxy entirely.
 
