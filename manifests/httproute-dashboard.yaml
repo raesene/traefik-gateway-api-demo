@@ -1,0 +1,28 @@
+# Dashboard route — self-referential Gateway API routing
+#   traefik.localhost  ->  Traefik's own API/dashboard (port 9000)
+#
+# Traffic arrives at the Gateway on port 80, is matched by this HTTPRoute,
+# and is forwarded to the "traefik" Kubernetes Service on port 9000.
+# Traefik then serves its own dashboard UI and API at that port.
+#
+# This HTTPRoute is in the "traefik" namespace, same as the backend Service,
+# so no ReferenceGrant is needed.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: traefik-dashboard
+  namespace: traefik
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - "traefik.localhost"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: traefik
+          port: 9000

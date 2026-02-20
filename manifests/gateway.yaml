@@ -1,0 +1,25 @@
+# Explicit Gateway definition.
+#
+# We manage this ourselves rather than relying on the Helm chart's auto-created
+# Gateway so we can control two things precisely:
+#
+#   port: 8000  — Traefik's "web" entrypoint runs internally on port 8000.
+#                 The hostPort (80) is just the node-level binding; the
+#                 Gateway listener must match the *entrypoint* port.
+#
+#   from: All   — Allow HTTPRoutes from any namespace (e.g. "demo") to attach
+#                 to this Gateway without needing a ReferenceGrant.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: traefik-gateway
+  namespace: traefik
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: web
+      protocol: HTTP
+      port: 8000
+      allowedRoutes:
+        namespaces:
+          from: All

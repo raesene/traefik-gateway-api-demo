@@ -1,0 +1,14 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: traefik-gateway-demo
+nodes:
+  - role: control-plane
+    # Map host ports to the kind node so Traefik (running with hostPort)
+    # is reachable directly at localhost:80 and localhost:443
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP

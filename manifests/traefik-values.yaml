@@ -1,0 +1,66 @@
+# Deploy as a DaemonSet so every node (including kind's control-plane) gets
+# a Traefik pod that can bind directly to host ports via hostPort.
+deployment:
+  kind: DaemonSet
+
+# kind's single node has the control-plane taint — tolerate it so the
+# DaemonSet pod actually schedules there.
+tolerations:
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Equal"
+    effect: "NoSchedule"
+
+# Bind Traefik's entrypoints directly to host ports.
+# Combined with kind's extraPortMappings this makes localhost:80 work.
+ports:
+  web:
+    port: 8000        # port Traefik listens on inside the container
+    hostPort: 80      # port bound on the kind node (matched by extraPortMappings)
+    expose:
+      default: true
+    exposedPort: 80
+    protocol: TCP
+  websecure:
+    port: 8443
+    hostPort: 443
+    expose:
+      default: true
+    exposedPort: 443
+    protocol: TCP
+  # Expose the traefik API/dashboard entrypoint so an HTTPRoute can route to it
+  traefik:
+    port: 9000
+    expose:
+      default: true
+    exposedPort: 9000
+    protocol: TCP
+
+# No LoadBalancer needed — external access goes through hostPort above.
+service:
+  type: ClusterIP
+
+# Enable the Gateway API provider; disable the legacy Ingress provider so
+# this demo focuses purely on Gateway API objects.
+providers:
+  kubernetesGateway:
+    enabled: true
+  kubernetesIngress:
+    enabled: false
+
+# Disable the Helm-managed Gateway so we can own the Gateway manifest
+# ourselves (manifests/gateway.yaml) and precisely control the listener
+# port and the namespace policy for cross-namespace HTTPRoutes.
+# The Helm chart still creates the GatewayClass ("traefik").
+gateway:
+  enabled: false
+
+# Enable the dashboard in insecure mode (fine for a local demo).
+api:
+  dashboard: true
+  insecure: true
+
+# Disable the auto-generated Traefik IngressRoute for the dashboard — we will
+# demonstrate routing to it via a Gateway API HTTPRoute instead.
+ingressRoute:
+  dashboard:
+    enabled: false
