@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traefik Gateway API on AWS EKS — Traffic Flow Tutorial</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e1e4ed;
+    --text-muted: #8b8fa3;
+    --accent: #6c8cff;
+    --accent-glow: rgba(108,140,255,0.3);
+    --green: #4ade80;
+    --green-glow: rgba(74,222,128,0.3);
+    --orange: #fb923c;
+    --orange-glow: rgba(251,146,60,0.3);
+    --purple: #c084fc;
+    --purple-glow: rgba(192,132,252,0.3);
+    --red: #f87171;
+    --cyan: #22d3ee;
+    --cyan-glow: rgba(34,211,238,0.3);
+    --yellow: #facc15;
+    --aws-orange: #ff9900;
+    --aws-orange-glow: rgba(255,153,0,0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    padding: 60px 0 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 12px;
+  }
+  header h1 span { color: var(--accent); }
+  header h1 .aws { color: var(--aws-orange); }
+  header p {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    max-width: 660px;
+    margin: 0 auto;
+  }
+
+  /* Sections */
+  section {
+    padding: 56px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  section:last-child { border-bottom: none; }
+
+  h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  h2 .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-right: 8px;
+    position: relative;
+    top: -2px;
+  }
+  .badge-control { background: var(--accent); color: #fff; }
+  .badge-data { background: var(--green); color: #0a0a0a; }
+  .badge-aws { background: var(--aws-orange); color: #0a0a0a; }
+  .badge-compare { background: var(--cyan); color: #0a0a0a; }
+  .badge-connect { background: var(--purple); color: #fff; }
+
+  .section-desc {
+    color: var(--text-muted);
+    font-size: 1rem;
+    margin-bottom: 32px;
+    max-width: 720px;
+  }
+
+  /* Diagram wrapper */
+  .diagram-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .diagram-wrap svg {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Step cards */
+  .steps {
+    display: grid;
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .step-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 16px;
+    align-items: start;
+    transition: border-color 0.2s;
+  }
+  .step-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+  .step-num {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  .step-num-control { background: rgba(108,140,255,0.15); color: var(--accent); }
+  .step-num-data { background: rgba(74,222,128,0.15); color: var(--green); }
+  .step-num-aws { background: rgba(255,153,0,0.15); color: var(--aws-orange); }
+  .step-card h3 { font-size: 1rem; margin-bottom: 4px; }
+  .step-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
+  .step-card code {
+    background: rgba(108,140,255,0.1);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  /* Port badge in SVG */
+  .port-label {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.active:hover { background: #5a7aee; }
+
+  /* Connection section */
+  .connection-box {
+    background: linear-gradient(135deg, rgba(108,140,255,0.08), rgba(192,132,252,0.08));
+    border: 1px solid rgba(192,132,252,0.25);
+    border-radius: 12px;
+    padding: 28px;
+    margin-top: 8px;
+  }
+  .connection-box p {
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+  }
+  .connection-box p:last-child { margin-bottom: 0; }
+  .connection-box strong { color: var(--text); }
+
+  /* Port table */
+  .port-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 0.9rem;
+  }
+  .port-table th {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .port-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .port-table tr:last-child td { border-bottom: none; }
+  .port-table code {
+    background: rgba(108,140,255,0.1);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+
+  /* Comparison table */
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 0.9rem;
+  }
+  .compare-table th {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .compare-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table code {
+    background: rgba(108,140,255,0.1);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+  .compare-table .same { color: var(--green); }
+  .compare-table .diff { color: var(--aws-orange); }
+
+  /* SVG animations */
+  @keyframes flowRight {
+    0% { offset-distance: 0%; opacity: 0; }
+    5% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { offset-distance: 100%; opacity: 0; }
+  }
+  @keyframes flowLeft {
+    0% { offset-distance: 100%; opacity: 0; }
+    5% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { offset-distance: 0%; opacity: 0; }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+  @keyframes watchPulse {
+    0%, 100% { r: 4; opacity: 0.8; }
+    50% { r: 7; opacity: 0.3; }
+  }
+  @keyframes dashMove {
+    to { stroke-dashoffset: -20; }
+  }
+  @keyframes fadeInOut {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.8; }
+  }
+
+  .packet {
+    offset-distance: 0%;
+    animation: flowRight 2.5s linear infinite;
+  }
+  .packet-reverse {
+    offset-distance: 100%;
+    animation: flowLeft 2.5s linear infinite;
+  }
+  .watch-dot {
+    animation: watchPulse 2s ease-in-out infinite;
+  }
+  .dashed-animated {
+    stroke-dasharray: 8 6;
+    animation: dashMove 1s linear infinite;
+  }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    header h1 { font-size: 1.6rem; }
+    .step-card { grid-template-columns: 36px 1fr; gap: 12px; }
+    .step-num { width: 36px; height: 36px; font-size: 0.85rem; }
+    .diagram-wrap { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <h1>Traefik <span>Gateway API</span> on <span class="aws">AWS EKS</span></h1>
+    <p>An animated guide to how the same Gateway API control plane works on AWS EKS, with an Application Load Balancer handling internet ingress instead of Docker and kind.</p>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 1 — CONTROL PLANE
+     ═══════════════════════════════════════════════ -->
+<section id="control-plane">
+  <div class="container">
+    <h2><span class="badge badge-control">Control Plane</span> Building the Routing Table</h2>
+    <p class="section-desc">The control plane is identical regardless of infrastructure. Traefik's <code>kubernetesGateway</code> provider watches the Kubernetes API for Gateway API objects and translates them into its internal routing table. The only difference: on EKS, the ALB target group points to Traefik's <code>:8000</code> entrypoint instead of a hostPort chain.</p>
+
+    <div class="diagram-wrap">
+      <svg id="svg-control" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background: K8s API Server box -->
+        <rect x="30" y="20" width="500" height="380" rx="12" fill="none" stroke="#2a2d3a" stroke-width="1.5"/>
+        <text x="50" y="50" fill="#8b8fa3" font-size="12" font-weight="600" font-family="system-ui" letter-spacing="0.05em">KUBERNETES API SERVER (EKS)</text>
+
+        <!-- GatewayClass -->
+        <rect x="70" y="80" width="200" height="64" rx="8" fill="rgba(108,140,255,0.1)" stroke="#6c8cff" stroke-width="1.5"/>
+        <text x="170" y="106" text-anchor="middle" fill="#6c8cff" font-size="12" font-weight="700" font-family="system-ui">GatewayClass</text>
+        <text x="170" y="126" text-anchor="middle" fill="#8b8fa3" font-size="11" font-family="monospace">"traefik"</text>
+
+        <!-- Arrow GatewayClass → Gateway -->
+        <line x1="170" y1="144" x2="170" y2="180" stroke="#3a3d4a" stroke-width="1.5" marker-end="url(#arrowGray)"/>
+
+        <!-- Gateway -->
+        <rect x="70" y="180" width="200" height="80" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+        <text x="170" y="208" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="700" font-family="system-ui">Gateway</text>
+        <text x="170" y="226" text-anchor="middle" fill="#8b8fa3" font-size="11" font-family="monospace">"traefik-gateway"</text>
+        <text x="170" y="244" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">listener: web, port 8000</text>
+
+        <!-- Arrow Gateway → HTTPRoute -->
+        <line x1="170" y1="260" x2="170" y2="296" stroke="#3a3d4a" stroke-width="1.5" marker-end="url(#arrowGray)"/>
+
+        <!-- HTTPRoute -->
+        <rect x="70" y="296" width="200" height="80" rx="8" fill="rgba(251,146,60,0.1)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="170" y="324" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="700" font-family="system-ui">HTTPRoute</text>
+        <text x="170" y="342" text-anchor="middle" fill="#8b8fa3" font-size="11" font-family="monospace">"whoami-host"</text>
+        <text x="170" y="358" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">Host: whoami.example.com → whoami:80</text>
+
+        <!-- Traefik box -->
+        <rect x="600" y="80" width="260" height="300" rx="12" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="730" y="110" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="700" font-family="system-ui">TRAEFIK</text>
+
+        <!-- Watch arrows (dashed, animated) -->
+        <path d="M 270 112 C 400 112, 500 112, 600 130" fill="none" stroke="#6c8cff" stroke-width="1.2" class="dashed-animated" opacity="0.6"/>
+        <circle r="5" fill="#6c8cff" class="watch-dot">
+          <animateMotion dur="2s" repeatCount="indefinite" path="M 270 112 C 400 112, 500 112, 600 130"/>
+        </circle>
+
+        <path d="M 270 220 C 420 220, 520 200, 600 200" fill="none" stroke="#4ade80" stroke-width="1.2" class="dashed-animated" opacity="0.6" style="animation-delay: 0.6s"/>
+        <circle r="5" fill="#4ade80" class="watch-dot" style="animation-delay: 0.6s">
+          <animateMotion dur="2s" repeatCount="indefinite" path="M 270 220 C 420 220, 520 200, 600 200" begin="0.6s"/>
+        </circle>
+
+        <path d="M 270 336 C 420 336, 520 300, 600 280" fill="none" stroke="#fb923c" stroke-width="1.2" class="dashed-animated" opacity="0.6" style="animation-delay: 1.2s"/>
+        <circle r="5" fill="#fb923c" class="watch-dot" style="animation-delay: 1.2s">
+          <animateMotion dur="2s" repeatCount="indefinite" path="M 270 336 C 420 336, 520 300, 600 280" begin="1.2s"/>
+        </circle>
+
+        <!-- Traefik internals -->
+        <text x="730" y="142" text-anchor="middle" fill="#8b8fa3" font-size="11" font-family="system-ui">watch loop</text>
+
+        <rect x="625" y="160" width="210" height="40" rx="6" fill="rgba(108,140,255,0.08)" stroke="#6c8cff" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="730" y="178" text-anchor="middle" fill="#6c8cff" font-size="10" font-weight="600" font-family="system-ui">Accepted GatewayClass</text>
+        <text x="730" y="193" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">controllerName: traefik.io/gateway-controller</text>
+
+        <rect x="625" y="210" width="210" height="40" rx="6" fill="rgba(74,222,128,0.08)" stroke="#4ade80" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="730" y="228" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="600" font-family="system-ui">Programmed Listener</text>
+        <text x="730" y="243" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">web:8000 — allowedRoutes: All</text>
+
+        <rect x="625" y="260" width="210" height="55" rx="6" fill="rgba(251,146,60,0.08)" stroke="#fb923c" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="730" y="278" text-anchor="middle" fill="#fb923c" font-size="10" font-weight="600" font-family="system-ui">Router Rule</text>
+        <text x="730" y="293" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">Host(`whoami.example.com`)</text>
+        <text x="730" y="306" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">→ pods [10.0.1.25, 10.0.2.18]</text>
+
+        <rect x="625" y="328" width="210" height="36" rx="6" fill="rgba(192,132,252,0.08)" stroke="#c084fc" stroke-width="1"/>
+        <text x="730" y="344" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="600" font-family="system-ui">EndpointSlice → direct pod IPs</text>
+        <text x="730" y="358" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">bypasses kube-proxy / ClusterIP</text>
+
+        <text x="440" y="100" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui" font-style="italic">watches &amp; reconciles</text>
+
+        <defs>
+          <marker id="arrowGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a3d4a"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="steps">
+      <div class="step-card">
+        <div class="step-num step-num-control">1</div>
+        <div>
+          <h3>GatewayClass accepted</h3>
+          <p>Traefik sees a GatewayClass whose <code>controllerName</code> matches <code>traefik.io/gateway-controller</code> and marks it <strong>Accepted</strong>. Identical to the local kind setup.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-control">2</div>
+        <div>
+          <h3>Gateway listener programmed</h3>
+          <p>Traefik opens a listener on its internal port <code>8000</code> (the "web" entrypoint) and marks the Gateway <strong>Programmed</strong>. On EKS, the ALB target group points to this port.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-control">3</div>
+        <div>
+          <h3>HTTPRoute reconciled</h3>
+          <p>Traefik reads the <code>parentRef</code>, resolves the backend Service to pod IPs via <strong>EndpointSlices</strong> (bypassing kube-proxy entirely), and adds the rule: <code>Host(`whoami.example.com`) &rarr; pods</code>.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-control">4</div>
+        <div>
+          <h3>Continuous reconciliation</h3>
+          <p>Every time a pod is added/removed or an HTTPRoute changes, Traefik reconciles its routing table automatically. No restart or config reload needed.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 2 — AWS INFRASTRUCTURE
+     ═══════════════════════════════════════════════ -->
+<section id="aws-infra">
+  <div class="container">
+    <h2><span class="badge badge-aws">AWS</span> Infrastructure Overview</h2>
+    <p class="section-desc">The AWS deployment uses a VPC with public and private subnets across two Availability Zones. The ALB sits in public subnets; EKS worker nodes and pods live in private subnets. The AWS Load Balancer Controller provisions the ALB from a Kubernetes Service annotation.</p>
+
+    <div class="diagram-wrap">
+      <svg id="svg-aws" viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowAws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff9900"/>
+          </marker>
+          <marker id="arrowGreen2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#4ade80"/>
+          </marker>
+          <filter id="glowAws">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- VPC boundary -->
+        <rect x="30" y="60" width="840" height="480" rx="14" fill="none" stroke="#ff9900" stroke-width="2" opacity="0.5"/>
+        <text x="50" y="88" fill="#ff9900" font-size="13" font-weight="700" font-family="system-ui">VPC 10.0.0.0/16</text>
+
+        <!-- Internet / Route 53 above VPC -->
+        <rect x="320" y="4" width="260" height="40" rx="8" fill="rgba(255,153,0,0.1)" stroke="#ff9900" stroke-width="1.5"/>
+        <text x="450" y="28" text-anchor="middle" fill="#ff9900" font-size="12" font-weight="700" font-family="system-ui">Route 53 / Internet</text>
+        <text x="450" y="40" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">whoami.example.com → ALB alias</text>
+
+        <!-- Arrow Internet → ALB -->
+        <path d="M 450 44 L 450 108" fill="none" stroke="#ff9900" stroke-width="2" marker-end="url(#arrowAws)"/>
+        <text x="470" y="80" fill="#ff9900" font-size="10" font-weight="600" font-family="monospace">:443</text>
+
+        <!-- ── Public Subnets ── -->
+        <rect x="60" y="108" width="380" height="140" rx="10" fill="rgba(255,153,0,0.04)" stroke="#ff9900" stroke-width="1" stroke-dasharray="6 4"/>
+        <text x="80" y="130" fill="#ff9900" font-size="10" font-weight="600" font-family="system-ui" letter-spacing="0.05em">PUBLIC SUBNET — AZ-a (10.0.1.0/24)</text>
+
+        <rect x="460" y="108" width="380" height="140" rx="10" fill="rgba(255,153,0,0.04)" stroke="#ff9900" stroke-width="1" stroke-dasharray="6 4"/>
+        <text x="480" y="130" fill="#ff9900" font-size="10" font-weight="600" font-family="system-ui" letter-spacing="0.05em">PUBLIC SUBNET — AZ-b (10.0.2.0/24)</text>
+
+        <!-- ALB spans both public subnets -->
+        <rect x="180" y="148" width="540" height="80" rx="10" fill="rgba(255,153,0,0.1)" stroke="#ff9900" stroke-width="2"/>
+        <text x="450" y="176" text-anchor="middle" fill="#ff9900" font-size="14" font-weight="700" font-family="system-ui">Application Load Balancer (ALB)</text>
+        <text x="450" y="196" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">Listener :443 — TLS termination (ACM cert)</text>
+        <text x="450" y="212" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui">Provisioned by AWS Load Balancer Controller</text>
+
+        <!-- Animated dot on ALB -->
+        <circle r="4" fill="#ff9900" filter="url(#glowAws)" opacity="0.8">
+          <animate attributeName="cx" values="200;700;200" dur="4s" repeatCount="indefinite"/>
+          <animate attributeName="cy" values="188;188;188" dur="4s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.4;1;0.4" dur="4s" repeatCount="indefinite"/>
+        </circle>
+
+        <!-- ── Private Subnets ── -->
+        <rect x="60" y="274" width="380" height="248" rx="10" fill="rgba(34,211,238,0.03)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6 4"/>
+        <text x="80" y="296" fill="#22d3ee" font-size="10" font-weight="600" font-family="system-ui" letter-spacing="0.05em">PRIVATE SUBNET — AZ-a (10.0.10.0/24)</text>
+
+        <rect x="460" y="274" width="380" height="248" rx="10" fill="rgba(34,211,238,0.03)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6 4"/>
+        <text x="480" y="296" fill="#22d3ee" font-size="10" font-weight="600" font-family="system-ui" letter-spacing="0.05em">PRIVATE SUBNET — AZ-b (10.0.20.0/24)</text>
+
+        <!-- EKS Worker Node AZ-a -->
+        <rect x="80" y="310" width="340" height="90" rx="8" fill="rgba(108,140,255,0.06)" stroke="#6c8cff" stroke-width="1"/>
+        <text x="250" y="332" text-anchor="middle" fill="#6c8cff" font-size="11" font-weight="700" font-family="system-ui">EKS Worker Node (EC2)</text>
+
+        <!-- Traefik pod on node-a -->
+        <rect x="100" y="344" width="140" height="44" rx="6" fill="rgba(34,211,238,0.08)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="170" y="364" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="700" font-family="system-ui">Traefik Pod</text>
+        <text x="170" y="380" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">:8000</text>
+
+        <!-- whoami pod on node-a -->
+        <rect x="260" y="344" width="140" height="44" rx="6" fill="rgba(74,222,128,0.08)" stroke="#4ade80" stroke-width="1.5"/>
+        <text x="330" y="364" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="700" font-family="system-ui">whoami Pod</text>
+        <text x="330" y="380" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">10.0.10.25:80</text>
+
+        <!-- EKS Worker Node AZ-b -->
+        <rect x="480" y="310" width="340" height="90" rx="8" fill="rgba(108,140,255,0.06)" stroke="#6c8cff" stroke-width="1"/>
+        <text x="650" y="332" text-anchor="middle" fill="#6c8cff" font-size="11" font-weight="700" font-family="system-ui">EKS Worker Node (EC2)</text>
+
+        <!-- Traefik pod on node-b -->
+        <rect x="500" y="344" width="140" height="44" rx="6" fill="rgba(34,211,238,0.08)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="570" y="364" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="700" font-family="system-ui">Traefik Pod</text>
+        <text x="570" y="380" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">:8000</text>
+
+        <!-- whoami pod on node-b -->
+        <rect x="660" y="344" width="140" height="44" rx="6" fill="rgba(74,222,128,0.08)" stroke="#4ade80" stroke-width="1.5"/>
+        <text x="730" y="364" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="700" font-family="system-ui">whoami Pod</text>
+        <text x="730" y="380" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">10.0.20.18:80</text>
+
+        <!-- ALB → Traefik arrows -->
+        <path d="M 350 228 L 170 344" fill="none" stroke="#ff9900" stroke-width="1.5" marker-end="url(#arrowAws)" opacity="0.7"/>
+        <path d="M 550 228 L 570 344" fill="none" stroke="#ff9900" stroke-width="1.5" marker-end="url(#arrowAws)" opacity="0.7"/>
+
+        <!-- Target group label -->
+        <rect x="330" y="258" width="240" height="20" rx="4" fill="var(--bg)" opacity="0.9"/>
+        <text x="450" y="273" text-anchor="middle" fill="#ff9900" font-size="10" font-weight="600" font-family="system-ui">Target Group → :8000 (health: /ping)</text>
+
+        <!-- Traefik → whoami arrows -->
+        <path d="M 240 366 L 260 366" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowGreen2)"/>
+        <path d="M 640 366 L 660 366" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowGreen2)"/>
+
+        <!-- AWS LB Controller -->
+        <rect x="80" y="420" width="340" height="50" rx="8" fill="rgba(255,153,0,0.06)" stroke="#ff9900" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="250" y="442" text-anchor="middle" fill="#ff9900" font-size="10" font-weight="700" font-family="system-ui">AWS Load Balancer Controller</text>
+        <text x="250" y="458" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">watches Service annotations → provisions ALB</text>
+
+        <!-- Animated watch dot for LB controller -->
+        <circle r="4" fill="#ff9900" class="watch-dot">
+          <animate attributeName="cx" values="250;450;250" dur="3s" repeatCount="indefinite"/>
+          <animate attributeName="cy" values="445;190;445" dur="3s" repeatCount="indefinite"/>
+        </circle>
+
+        <!-- Animated packets through the infrastructure -->
+        <circle r="5" fill="#4ade80" filter="url(#glowAws)" opacity="0">
+          <animate attributeName="opacity" values="0;1;1;1;0" dur="4s" repeatCount="indefinite"/>
+          <animateMotion dur="4s" repeatCount="indefinite" path="M 450 44 L 450 188 L 350 228 L 170 366"/>
+        </circle>
+        <circle r="5" fill="#4ade80" filter="url(#glowAws)" opacity="0">
+          <animate attributeName="opacity" values="0;1;1;1;0" dur="4s" repeatCount="indefinite" begin="2s"/>
+          <animateMotion dur="4s" repeatCount="indefinite" begin="2s" path="M 450 44 L 450 188 L 550 228 L 570 366"/>
+        </circle>
+
+        <!-- EKS Cluster label -->
+        <rect x="480" y="420" width="340" height="50" rx="8" fill="rgba(108,140,255,0.04)" stroke="#6c8cff" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="650" y="442" text-anchor="middle" fill="#6c8cff" font-size="10" font-weight="700" font-family="system-ui">EKS Control Plane (managed)</text>
+        <text x="650" y="458" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">API server, etcd, scheduler</text>
+
+        <!-- NAT Gateway note -->
+        <rect x="60" y="490" width="810" height="36" rx="6" fill="rgba(250,204,21,0.05)" stroke="#facc15" stroke-width="1" opacity="0.7"/>
+        <text x="465" y="513" text-anchor="middle" fill="#facc15" font-size="10" font-weight="600" font-family="system-ui">NAT Gateways in public subnets allow private subnet nodes to pull images and reach AWS APIs (not shown for clarity)</text>
+      </svg>
+    </div>
+
+    <div class="steps">
+      <div class="step-card">
+        <div class="step-num step-num-aws">1</div>
+        <div>
+          <h3>VPC with public/private subnets</h3>
+          <p>The VPC spans two Availability Zones. Public subnets host the ALB and NAT Gateways. Private subnets host EKS worker nodes and pods, with no direct internet access.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-aws">2</div>
+        <div>
+          <h3>ALB in public subnets</h3>
+          <p>The internet-facing ALB listens on <code>:443</code>, terminates TLS using an ACM certificate, and forwards traffic to a target group of Traefik pods on port <code>8000</code>.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-aws">3</div>
+        <div>
+          <h3>AWS Load Balancer Controller</h3>
+          <p>A Kubernetes controller running in the cluster watches for Service annotations like <code>service.beta.kubernetes.io/aws-load-balancer-type: external</code> and automatically provisions and configures the ALB.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-aws">4</div>
+        <div>
+          <h3>Traefik handles Gateway API routing</h3>
+          <p>Once traffic reaches Traefik on <code>:8000</code>, everything works identically to the local kind setup. Traefik reads the Host header, looks up its routing table, and forwards to backend pods via EndpointSlices.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 3 — DATA PLANE
+     ═══════════════════════════════════════════════ -->
+<section id="data-plane">
+  <div class="container">
+    <h2><span class="badge badge-data">Data Plane</span> The Request Journey</h2>
+    <p class="section-desc">Follow an HTTPS request from the internet through Route 53, the ALB, Traefik, and finally to the backend pod. Compare with the local kind tutorial to see what changes and what stays the same.</p>
+
+    <div class="controls">
+      <button class="btn active" onclick="setMode('auto')" id="btn-auto">Auto-play</button>
+      <button class="btn" onclick="setMode('step')" id="btn-step">Step-through</button>
+      <button class="btn" onclick="prevStep()" id="btn-prev" style="display:none">&larr; Prev</button>
+      <button class="btn" onclick="nextStep()" id="btn-next" style="display:none">Next &rarr;</button>
+      <span id="step-indicator" style="display:none;align-self:center;color:var(--text-muted);font-size:0.85rem;margin-left:8px"></span>
+    </div>
+
+    <div class="diagram-wrap">
+      <svg id="svg-data" viewBox="0 0 900 580" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowGreen3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#4ade80"/>
+          </marker>
+          <marker id="arrowCyan2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#22d3ee"/>
+          </marker>
+          <marker id="arrowOrange2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#ff9900"/>
+          </marker>
+          <marker id="arrowResponse2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#f87171"/>
+          </marker>
+          <filter id="glow2">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Layer labels (left side) -->
+        <text x="16" y="60" fill="#8b8fa3" font-size="9" font-weight="600" font-family="system-ui" letter-spacing="0.06em" transform="rotate(-90 16 60)">CLIENT</text>
+        <text x="16" y="190" fill="#ff9900" font-size="9" font-weight="600" font-family="system-ui" letter-spacing="0.06em" transform="rotate(-90 16 190)">AWS</text>
+        <text x="16" y="370" fill="#8b8fa3" font-size="9" font-weight="600" font-family="system-ui" letter-spacing="0.06em" transform="rotate(-90 16 370)">K8S NODE</text>
+        <text x="16" y="510" fill="#8b8fa3" font-size="9" font-weight="600" font-family="system-ui" letter-spacing="0.06em" transform="rotate(-90 16 510)">POD</text>
+
+        <!-- Layer boundary lines -->
+        <line x1="35" y1="110" x2="880" y2="110" stroke="#2a2d3a" stroke-width="1" stroke-dasharray="6 4"/>
+        <line x1="35" y1="280" x2="880" y2="280" stroke="#2a2d3a" stroke-width="1" stroke-dasharray="6 4"/>
+        <line x1="35" y1="430" x2="880" y2="430" stroke="#2a2d3a" stroke-width="1" stroke-dasharray="6 4"/>
+
+        <!-- ── Step 1: DNS Resolution ── -->
+        <g class="data-step" data-step="1">
+          <rect x="280" y="18" width="200" height="44" rx="6" fill="rgba(250,204,21,0.06)" stroke="#facc15" stroke-width="1" opacity="0.8"/>
+          <text x="380" y="37" text-anchor="middle" fill="#facc15" font-size="10" font-weight="600" font-family="system-ui">Step 1: Route 53 DNS</text>
+          <text x="380" y="52" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">whoami.example.com → ALB IP</text>
+        </g>
+
+        <g class="data-step" data-step="1">
+          <rect x="60" y="30" width="180" height="60" rx="8" fill="rgba(108,140,255,0.1)" stroke="#6c8cff" stroke-width="1.5"/>
+          <text x="150" y="56" text-anchor="middle" fill="#6c8cff" font-size="13" font-weight="700" font-family="system-ui">Client (browser)</text>
+          <text x="150" y="74" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">whoami.example.com</text>
+        </g>
+
+        <!-- ── Step 2: Client → ALB ── -->
+        <g class="data-step" data-step="2">
+          <path d="M 150 90 L 150 140" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowGreen3)"/>
+          <rect x="165" y="98" width="80" height="18" rx="4" fill="var(--bg)"/>
+          <text x="205" y="111" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="600" font-family="monospace">:443</text>
+        </g>
+
+        <!-- ── Step 3: ALB (TLS termination) ── -->
+        <g class="data-step" data-step="3">
+          <rect x="60" y="140" width="500" height="80" rx="10" fill="rgba(255,153,0,0.08)" stroke="#ff9900" stroke-width="2"/>
+          <text x="310" y="168" text-anchor="middle" fill="#ff9900" font-size="13" font-weight="700" font-family="system-ui">Application Load Balancer</text>
+          <text x="310" y="186" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">TLS termination (ACM certificate)</text>
+          <text x="310" y="204" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui">Decrypts HTTPS → inspects HTTP → forwards to target group</text>
+        </g>
+
+        <!-- ACM cert badge -->
+        <g class="data-step" data-step="3">
+          <rect x="590" y="148" width="180" height="60" rx="6" fill="rgba(255,153,0,0.06)" stroke="#ff9900" stroke-width="1" opacity="0.8"/>
+          <text x="680" y="170" text-anchor="middle" fill="#ff9900" font-size="10" font-weight="600" font-family="system-ui">ACM Certificate</text>
+          <text x="680" y="186" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">*.example.com</text>
+          <text x="680" y="200" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui">auto-renewed by AWS</text>
+        </g>
+
+        <!-- ── Step 4: ALB → Target Group → Traefik ── -->
+        <g class="data-step" data-step="4">
+          <path d="M 310 220 L 310 250" fill="none" stroke="#ff9900" stroke-width="2" marker-end="url(#arrowOrange2)"/>
+          <rect x="325" y="228" width="170" height="18" rx="4" fill="var(--bg)"/>
+          <text x="410" y="241" text-anchor="middle" fill="#ff9900" font-size="10" font-weight="600" font-family="monospace">Target Group :8000</text>
+        </g>
+
+        <!-- ── Step 5: Cross-subnet traffic ── -->
+        <g class="data-step" data-step="5">
+          <rect x="60" y="250" width="500" height="30" rx="5" fill="rgba(192,132,252,0.06)" stroke="#c084fc" stroke-width="1" opacity="0.7"/>
+          <text x="310" y="270" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="600" font-family="system-ui">Cross-subnet: public → private (VPC routing)</text>
+        </g>
+
+        <g class="data-step" data-step="5">
+          <path d="M 310 280 L 310 310" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowGreen3)"/>
+          <rect x="325" y="286" width="80" height="18" rx="4" fill="var(--bg)"/>
+          <text x="365" y="299" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="600" font-family="monospace">:8000</text>
+        </g>
+
+        <!-- ── Step 6: Traefik receives request ── -->
+        <g class="data-step" data-step="6">
+          <rect x="60" y="310" width="500" height="100" rx="10" fill="rgba(34,211,238,0.06)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="310" y="335" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="700" font-family="system-ui">Traefik (web entrypoint :8000)</text>
+
+          <!-- Routing table mini-diagram -->
+          <rect x="80" y="348" width="200" height="44" rx="5" fill="rgba(108,140,255,0.08)" stroke="#6c8cff" stroke-width="1"/>
+          <text x="180" y="366" text-anchor="middle" fill="#6c8cff" font-size="10" font-weight="600" font-family="system-ui">Routing Table Lookup</text>
+          <text x="180" y="382" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">Host header → rule match</text>
+
+          <text x="305" y="374" text-anchor="middle" fill="#3a3d4a" font-size="18" font-family="system-ui">→</text>
+
+          <rect x="325" y="348" width="130" height="44" rx="5" fill="rgba(192,132,252,0.08)" stroke="#c084fc" stroke-width="1"/>
+          <text x="390" y="366" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="600" font-family="system-ui">EndpointSlice</text>
+          <text x="390" y="382" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">round-robin pod IPs</text>
+        </g>
+
+        <!-- ── Step 7: Traefik → Backend pod ── -->
+        <g class="data-step" data-step="7">
+          <path d="M 460 370 C 520 370, 560 370, 580 450" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowCyan2)"/>
+          <rect x="495" y="395" width="70" height="18" rx="4" fill="var(--bg)"/>
+          <text x="530" y="408" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600" font-family="monospace">:80</text>
+          <text x="530" y="425" text-anchor="middle" fill="#8b8fa3" font-size="8" font-family="system-ui">direct pod IP</text>
+        </g>
+
+        <!-- ── Step 8: Backend Pod ── -->
+        <g class="data-step" data-step="8">
+          <rect x="530" y="450" width="220" height="80" rx="10" fill="rgba(74,222,128,0.08)" stroke="#4ade80" stroke-width="1.5"/>
+          <text x="640" y="478" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="700" font-family="system-ui">whoami pod</text>
+          <text x="640" y="496" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">10.0.10.25:80</text>
+          <text x="640" y="514" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui">namespace: demo</text>
+        </g>
+
+        <!-- Forwarded headers annotation -->
+        <g class="data-step" data-step="8">
+          <rect x="600" y="300" width="250" height="80" rx="6" fill="rgba(250,204,21,0.05)" stroke="#facc15" stroke-width="1" opacity="0.7"/>
+          <text x="725" y="320" text-anchor="middle" fill="#facc15" font-size="10" font-weight="600" font-family="system-ui">Headers added (ALB + Traefik):</text>
+          <text x="725" y="336" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">X-Forwarded-For: &lt;client IP&gt;</text>
+          <text x="725" y="350" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">X-Forwarded-Host: whoami.example.com</text>
+          <text x="725" y="364" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">X-Forwarded-Proto: https</text>
+          <text x="725" y="376" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">X-Amzn-Trace-Id: Root=1-...</text>
+        </g>
+
+        <!-- ── Step 9: Response path (reverse) ── -->
+        <g class="data-step" data-step="9">
+          <path d="M 750 480 C 800 480, 840 400, 850 300 C 860 200, 850 120, 830 60" fill="none" stroke="#f87171" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowResponse2)" opacity="0.6"/>
+          <text x="865" y="280" fill="#f87171" font-size="10" font-weight="600" font-family="system-ui" transform="rotate(90 865 280)">response</text>
+        </g>
+
+        <!-- Animated request packets (auto mode) -->
+        <g id="auto-packets">
+          <circle r="5" fill="#4ade80" filter="url(#glow2)" opacity="0">
+            <animate attributeName="opacity" values="0;1;1;1;1;1;1;1;1;0" dur="7s" repeatCount="indefinite"/>
+            <animateMotion dur="7s" repeatCount="indefinite"
+              path="M 150 80 L 150 160 L 310 190 L 310 260 L 310 310 L 310 370 L 460 370 L 580 450 L 640 480"/>
+          </circle>
+          <circle r="4" fill="#4ade80" filter="url(#glow2)" opacity="0">
+            <animate attributeName="opacity" values="0;1;1;1;1;1;1;1;1;0" dur="7s" repeatCount="indefinite" begin="3.5s"/>
+            <animateMotion dur="7s" repeatCount="indefinite" begin="3.5s"
+              path="M 150 80 L 150 160 L 310 190 L 310 260 L 310 310 L 310 370 L 460 370 L 580 450 L 640 480"/>
+          </circle>
+          <!-- Response packet -->
+          <circle r="4" fill="#f87171" filter="url(#glow2)" opacity="0">
+            <animate attributeName="opacity" values="0;0;0;0;0;0;1;1;1;0" dur="9s" repeatCount="indefinite"/>
+            <animateMotion dur="9s" repeatCount="indefinite"
+              path="M 750 480 C 800 480, 840 400, 850 300 C 860 200, 850 120, 830 60"/>
+          </circle>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Step descriptions -->
+    <div class="steps" id="data-steps">
+      <div class="step-card" data-step="1">
+        <div class="step-num step-num-data">1</div>
+        <div>
+          <h3>DNS resolution (Route 53)</h3>
+          <p>The client resolves <code>whoami.example.com</code> via Route 53. An alias record (A/AAAA) points to the ALB's IP addresses. Unlike the local setup, there's no <code>/etc/hosts</code> file involved.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="2">
+        <div class="step-num step-num-data">2</div>
+        <div>
+          <h3>Client connects to ALB (HTTPS :443)</h3>
+          <p>The client opens a TLS connection to the internet-facing ALB on port <code>443</code>. The ALB is in the public subnets, accessible from the internet.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="3">
+        <div class="step-num step-num-data">3</div>
+        <div>
+          <h3>ALB TLS termination</h3>
+          <p>The ALB terminates TLS using an ACM-managed certificate for <code>*.example.com</code>. It decrypts the request, inspects HTTP headers, and prepares to forward to the target group.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="4">
+        <div class="step-num step-num-data">4</div>
+        <div>
+          <h3>ALB target group routing</h3>
+          <p>The ALB forwards the request to its target group, which contains the Traefik pods/nodes on port <code>8000</code>. The ALB health-checks Traefik's <code>/ping</code> endpoint to ensure targets are healthy.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="5">
+        <div class="step-num step-num-data">5</div>
+        <div>
+          <h3>Cross-subnet traffic</h3>
+          <p>Traffic crosses from the public subnet (ALB) to the private subnet (EKS worker node) via VPC routing. No NAT is needed for this direction — the VPC route tables handle it.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="6">
+        <div class="step-num step-num-data">6</div>
+        <div>
+          <h3>Traefik receives the request</h3>
+          <p>Traefik receives the request on its web entrypoint <code>:8000</code>. It reads the <code>Host: whoami.example.com</code> header and looks it up in its routing table — the same routing table built by the control plane.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="7">
+        <div class="step-num step-num-data">7</div>
+        <div>
+          <h3>Backend pod selection</h3>
+          <p>Traefik resolves the backend Service to pod IPs via EndpointSlices (e.g. <code>10.0.10.25</code>, <code>10.0.20.18</code>). It round-robins between them and opens a direct connection to <code>pod-IP:80</code>, <strong>bypassing kube-proxy entirely</strong>.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="8">
+        <div class="step-num step-num-data">8</div>
+        <div>
+          <h3>Request forwarded with headers</h3>
+          <p>Both the ALB and Traefik add forwarding headers. The pod sees <code>X-Forwarded-For</code>, <code>X-Forwarded-Host</code>, <code>X-Forwarded-Proto: https</code>, and the ALB's trace ID <code>X-Amzn-Trace-Id</code>.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="9">
+        <div class="step-num step-num-data">9</div>
+        <div>
+          <h3>Response returns</h3>
+          <p>The response travels back: pod &rarr; Traefik &rarr; ALB (re-encrypts to TLS) &rarr; client. The ALB handles the TLS encryption on the return path as well.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Port table -->
+    <table class="port-table">
+      <thead>
+        <tr><th>Layer</th><th>Port</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Route 53 + client</td><td><code>443</code></td><td>HTTPS to ALB</td></tr>
+        <tr><td>ALB listener</td><td><code>443 &rarr; 8000</code></td><td>TLS termination, forward to target group</td></tr>
+        <tr><td>Target group</td><td><code>8000</code></td><td>Traefik's web entrypoint</td></tr>
+        <tr><td>Gateway listener</td><td><code>8000</code></td><td>Matches Traefik entrypoint</td></tr>
+        <tr><td>Backend Service</td><td><code>80</code></td><td>whoami Service port</td></tr>
+        <tr><td>Pod containerPort</td><td><code>80</code></td><td>whoami process</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 4 — COMPARISON
+     ═══════════════════════════════════════════════ -->
+<section id="comparison">
+  <div class="container">
+    <h2><span class="badge badge-compare">Compare</span> kind (local) vs EKS (AWS)</h2>
+    <p class="section-desc">The Gateway API control plane is identical on both platforms. The differences are all in how traffic reaches Traefik — the "plumbing" below the Gateway listener.</p>
+
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+        <!-- kind side -->
+        <rect x="30" y="20" width="400" height="260" rx="10" fill="rgba(108,140,255,0.04)" stroke="#6c8cff" stroke-width="1.5"/>
+        <text x="230" y="48" text-anchor="middle" fill="#6c8cff" font-size="14" font-weight="700" font-family="system-ui">Local (kind)</text>
+
+        <text x="230" y="75" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">/etc/hosts → 127.0.0.1</text>
+        <text x="70" y="95" fill="#3a3d4a" font-size="10" font-family="system-ui">↓</text>
+        <rect x="60" y="100" width="360" height="28" rx="5" fill="rgba(251,146,60,0.06)" stroke="#fb923c" stroke-width="1"/>
+        <text x="230" y="119" text-anchor="middle" fill="#fb923c" font-size="10" font-family="monospace">Docker DNAT :80 → kind-node:80</text>
+        <text x="70" y="140" fill="#3a3d4a" font-size="10" font-family="system-ui">↓</text>
+        <rect x="60" y="145" width="360" height="28" rx="5" fill="rgba(192,132,252,0.06)" stroke="#c084fc" stroke-width="1"/>
+        <text x="230" y="164" text-anchor="middle" fill="#c084fc" font-size="10" font-family="monospace">hostPort DNAT :80 → traefik:8000</text>
+        <text x="70" y="185" fill="#3a3d4a" font-size="10" font-family="system-ui">↓</text>
+        <rect x="60" y="190" width="360" height="28" rx="5" fill="rgba(34,211,238,0.08)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="230" y="209" text-anchor="middle" fill="#22d3ee" font-size="11" font-weight="600" font-family="monospace">Traefik :8000</text>
+        <text x="70" y="230" fill="#3a3d4a" font-size="10" font-family="system-ui">↓</text>
+        <rect x="60" y="235" width="360" height="28" rx="5" fill="rgba(74,222,128,0.06)" stroke="#4ade80" stroke-width="1"/>
+        <text x="230" y="254" text-anchor="middle" fill="#4ade80" font-size="10" font-family="monospace">whoami pod :80</text>
+
+        <text x="230" y="276" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui" font-style="italic">No TLS, single node, Docker networking</text>
+
+        <!-- EKS side -->
+        <rect x="470" y="20" width="400" height="260" rx="10" fill="rgba(255,153,0,0.04)" stroke="#ff9900" stroke-width="1.5"/>
+        <text x="670" y="48" text-anchor="middle" fill="#ff9900" font-size="14" font-weight="700" font-family="system-ui">AWS EKS</text>
+
+        <text x="670" y="75" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">Route 53 → ALB IP (alias)</text>
+        <text x="510" y="95" fill="#3a3d4a" font-size="10" font-family="system-ui">↓</text>
+        <rect x="500" y="100" width="360" height="28" rx="5" fill="rgba(255,153,0,0.08)" stroke="#ff9900" stroke-width="1"/>
+        <text x="670" y="119" text-anchor="middle" fill="#ff9900" font-size="10" font-family="monospace">ALB :443 TLS termination (ACM)</text>
+        <text x="510" y="140" fill="#3a3d4a" font-size="10" font-family="system-ui">↓</text>
+        <rect x="500" y="145" width="360" height="28" rx="5" fill="rgba(255,153,0,0.06)" stroke="#ff9900" stroke-width="1"/>
+        <text x="670" y="164" text-anchor="middle" fill="#ff9900" font-size="10" font-family="monospace">Target group → :8000 (cross-subnet)</text>
+        <text x="510" y="185" fill="#3a3d4a" font-size="10" font-family="system-ui">↓</text>
+        <rect x="500" y="190" width="360" height="28" rx="5" fill="rgba(34,211,238,0.08)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="670" y="209" text-anchor="middle" fill="#22d3ee" font-size="11" font-weight="600" font-family="monospace">Traefik :8000</text>
+        <text x="510" y="230" fill="#3a3d4a" font-size="10" font-family="system-ui">↓</text>
+        <rect x="500" y="235" width="360" height="28" rx="5" fill="rgba(74,222,128,0.06)" stroke="#4ade80" stroke-width="1"/>
+        <text x="670" y="254" text-anchor="middle" fill="#4ade80" font-size="10" font-family="monospace">whoami pod :80</text>
+
+        <text x="670" y="276" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui" font-style="italic">TLS, multi-AZ, VPC networking</text>
+
+        <!-- "Same" bracket connecting Traefik + pod rows -->
+        <rect x="435" y="188" width="30" height="80" rx="4" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1"/>
+        <text x="450" y="232" text-anchor="middle" fill="#4ade80" font-size="9" font-weight="700" font-family="system-ui" transform="rotate(-90 450 232)">SAME</text>
+      </svg>
+    </div>
+
+    <table class="compare-table">
+      <thead>
+        <tr><th>Aspect</th><th>kind (local)</th><th>AWS EKS</th><th>Changed?</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Gateway API objects</td>
+          <td>GatewayClass, Gateway, HTTPRoute</td>
+          <td>GatewayClass, Gateway, HTTPRoute</td>
+          <td class="same">Same</td>
+        </tr>
+        <tr>
+          <td>Traefik control plane</td>
+          <td>Watches K8s API, builds routing table</td>
+          <td>Watches K8s API, builds routing table</td>
+          <td class="same">Same</td>
+        </tr>
+        <tr>
+          <td>EndpointSlice routing</td>
+          <td>Direct pod IPs, bypasses kube-proxy</td>
+          <td>Direct pod IPs, bypasses kube-proxy</td>
+          <td class="same">Same</td>
+        </tr>
+        <tr>
+          <td>HTTPRoute rules</td>
+          <td>Host matching, path matching</td>
+          <td>Host matching, path matching</td>
+          <td class="same">Same</td>
+        </tr>
+        <tr>
+          <td>DNS</td>
+          <td><code>/etc/hosts</code> → <code>127.0.0.1</code></td>
+          <td>Route 53 alias → ALB IP</td>
+          <td class="diff">Different</td>
+        </tr>
+        <tr>
+          <td>Ingress path</td>
+          <td>Docker DNAT → hostPort DNAT</td>
+          <td>ALB → target group</td>
+          <td class="diff">Different</td>
+        </tr>
+        <tr>
+          <td>TLS</td>
+          <td>None (plain HTTP)</td>
+          <td>ACM certificate on ALB</td>
+          <td class="diff">Different</td>
+        </tr>
+        <tr>
+          <td>Networking</td>
+          <td>Single Docker container (kind node)</td>
+          <td>VPC with public/private subnets, multi-AZ</td>
+          <td class="diff">Different</td>
+        </tr>
+        <tr>
+          <td>High availability</td>
+          <td>Single node, no redundancy</td>
+          <td>Multi-AZ ALB, multiple worker nodes</td>
+          <td class="diff">Different</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 5 — HOW THEY CONNECT
+     ═══════════════════════════════════════════════ -->
+<section id="connection">
+  <div class="container">
+    <h2><span class="badge badge-connect">Link</span> How the Two Planes Interlock</h2>
+    <p class="section-desc">The control plane and data plane aren't independent — the control plane builds the routing table that the data plane relies on at runtime. This is true on kind, EKS, or any other Kubernetes platform.</p>
+
+    <div class="connection-box">
+      <p><strong>The control plane builds the map.</strong> Traefik continuously watches Gateway API objects and EndpointSlices, assembling an in-memory routing table that maps hostnames and paths to live pod IPs. This works identically on EKS as on kind.</p>
+      <p><strong>The data plane reads the map.</strong> When a request arrives at Traefik's <code>:8000</code> entrypoint — whether via a local hostPort chain or an ALB target group — Traefik consults this routing table to decide which pod gets the traffic. Without the control plane's reconciliation loop, Traefik would have no rules and return 404.</p>
+      <p><strong>The link is live.</strong> If you scale a Deployment or change an HTTPRoute, the control plane updates the routing table within seconds. The very next request uses the new configuration — zero downtime, no restarts. On EKS, the ALB health checks ensure only healthy Traefik instances receive traffic.</p>
+      <p><strong>Infrastructure is just plumbing.</strong> The Gateway API abstraction means your HTTPRoute manifests are portable. The same <code>Host(`whoami.example.com`)</code> rule works on kind, EKS, GKE, or bare metal. Only the "plumbing" that delivers packets to Traefik's entrypoint changes.</p>
+    </div>
+
+    <div class="diagram-wrap" style="margin-top: 24px">
+      <svg viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowPurple2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#c084fc"/>
+          </marker>
+          <filter id="glow3">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Control plane box -->
+        <rect x="40" y="20" width="340" height="160" rx="10" fill="rgba(108,140,255,0.06)" stroke="#6c8cff" stroke-width="1.5"/>
+        <text x="210" y="50" text-anchor="middle" fill="#6c8cff" font-size="13" font-weight="700" font-family="system-ui">Control Plane</text>
+        <text x="210" y="75" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">GatewayClass + Gateway + HTTPRoute</text>
+        <text x="210" y="95" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">+ EndpointSlice watching</text>
+
+        <rect x="100" y="115" width="220" height="44" rx="6" fill="rgba(108,140,255,0.12)" stroke="#6c8cff" stroke-width="1"/>
+        <text x="210" y="138" text-anchor="middle" fill="#6c8cff" font-size="11" font-weight="600" font-family="system-ui">Routing Table</text>
+        <text x="210" y="153" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">host/path rules → pod IPs</text>
+
+        <!-- Arrow connecting the planes -->
+        <path d="M 380 137 C 440 137, 460 100, 520 100" fill="none" stroke="#c084fc" stroke-width="2" marker-end="url(#arrowPurple2)"/>
+        <text x="450" y="95" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="600" font-family="system-ui">feeds into</text>
+        <circle r="4" fill="#c084fc" filter="url(#glow3)">
+          <animateMotion dur="2s" repeatCount="indefinite" path="M 380 137 C 440 137, 460 100, 520 100"/>
+        </circle>
+
+        <!-- Data plane box -->
+        <rect x="520" y="20" width="340" height="160" rx="10" fill="rgba(74,222,128,0.06)" stroke="#4ade80" stroke-width="1.5"/>
+        <text x="690" y="50" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="700" font-family="system-ui">Data Plane</text>
+        <text x="690" y="75" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">HTTPS → ALB → Traefik → pod</text>
+
+        <text x="690" y="110" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">Step 6: read Host header</text>
+        <text x="690" y="128" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="600" font-family="system-ui">look up in routing table</text>
+        <text x="690" y="148" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">Step 7: pick pod IP, forward</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<footer style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:0.85rem;border-top:1px solid var(--border)">
+  <div class="container">
+    Traefik Gateway API Demo &mdash; AWS EKS tutorial, self-contained, no external dependencies
+  </div>
+</footer>
+
+<script>
+// ── Step-through mode for Data Plane diagram ──
+let mode = 'auto';
+let currentStep = 1;
+const totalSteps = 9;
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-auto').classList.toggle('active', m === 'auto');
+  document.getElementById('btn-step').classList.toggle('active', m === 'step');
+  document.getElementById('btn-prev').style.display = m === 'step' ? '' : 'none';
+  document.getElementById('btn-next').style.display = m === 'step' ? '' : 'none';
+  document.getElementById('step-indicator').style.display = m === 'step' ? '' : 'none';
+  document.getElementById('auto-packets').style.display = m === 'auto' ? '' : 'none';
+
+  if (m === 'step') {
+    currentStep = 1;
+    highlightStep(currentStep);
+  } else {
+    clearHighlights();
+  }
+}
+
+function nextStep() {
+  if (currentStep < totalSteps) { currentStep++; highlightStep(currentStep); }
+}
+function prevStep() {
+  if (currentStep > 1) { currentStep--; highlightStep(currentStep); }
+}
+
+function highlightStep(step) {
+  document.getElementById('step-indicator').textContent = 'Step ' + step + ' / ' + totalSteps;
+
+  // Highlight SVG groups
+  document.querySelectorAll('#svg-data .data-step').forEach(g => {
+    const s = parseInt(g.getAttribute('data-step'));
+    g.style.opacity = s <= step ? '1' : '0.15';
+    g.style.transition = 'opacity 0.3s';
+  });
+
+  // Highlight step cards
+  document.querySelectorAll('#data-steps .step-card').forEach(card => {
+    const s = parseInt(card.getAttribute('data-step'));
+    card.classList.toggle('active', s === step);
+    card.style.opacity = s <= step ? '1' : '0.3';
+    card.style.transition = 'opacity 0.3s';
+  });
+
+  // Scroll active card into view
+  const activeCard = document.querySelector('#data-steps .step-card.active');
+  if (activeCard) activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function clearHighlights() {
+  document.querySelectorAll('#svg-data .data-step').forEach(g => {
+    g.style.opacity = '1';
+    g.style.transition = 'opacity 0.3s';
+  });
+  document.querySelectorAll('#data-steps .step-card').forEach(card => {
+    card.classList.remove('active');
+    card.style.opacity = '1';
+    card.style.transition = 'opacity 0.3s';
+  });
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (mode !== 'step') return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); nextStep(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prevStep(); }
+});
+</script>
+</body>
+</html>
