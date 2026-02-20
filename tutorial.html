@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traefik Gateway API — Traffic Flow Tutorial</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e1e4ed;
+    --text-muted: #8b8fa3;
+    --accent: #6c8cff;
+    --accent-glow: rgba(108,140,255,0.3);
+    --green: #4ade80;
+    --green-glow: rgba(74,222,128,0.3);
+    --orange: #fb923c;
+    --orange-glow: rgba(251,146,60,0.3);
+    --purple: #c084fc;
+    --purple-glow: rgba(192,132,252,0.3);
+    --red: #f87171;
+    --cyan: #22d3ee;
+    --cyan-glow: rgba(34,211,238,0.3);
+    --yellow: #facc15;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    padding: 60px 0 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 12px;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* Sections */
+  section {
+    padding: 56px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  section:last-child { border-bottom: none; }
+
+  h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  h2 .badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-right: 8px;
+    position: relative;
+    top: -2px;
+  }
+  .badge-control { background: var(--accent); color: #fff; }
+  .badge-data { background: var(--green); color: #0a0a0a; }
+  .badge-connect { background: var(--purple); color: #fff; }
+
+  .section-desc {
+    color: var(--text-muted);
+    font-size: 1rem;
+    margin-bottom: 32px;
+    max-width: 720px;
+  }
+
+  /* Diagram wrapper */
+  .diagram-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .diagram-wrap svg {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Step cards */
+  .steps {
+    display: grid;
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .step-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 16px;
+    align-items: start;
+    transition: border-color 0.2s;
+  }
+  .step-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+  .step-num {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+  .step-num-control { background: rgba(108,140,255,0.15); color: var(--accent); }
+  .step-num-data { background: rgba(74,222,128,0.15); color: var(--green); }
+  .step-card h3 { font-size: 1rem; margin-bottom: 4px; }
+  .step-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.6; }
+  .step-card code {
+    background: rgba(108,140,255,0.1);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  /* Port badge in SVG */
+  .port-label {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.active:hover { background: #5a7aee; }
+
+  /* Connection section */
+  .connection-box {
+    background: linear-gradient(135deg, rgba(108,140,255,0.08), rgba(192,132,252,0.08));
+    border: 1px solid rgba(192,132,252,0.25);
+    border-radius: 12px;
+    padding: 28px;
+    margin-top: 8px;
+  }
+  .connection-box p {
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+  }
+  .connection-box p:last-child { margin-bottom: 0; }
+  .connection-box strong { color: var(--text); }
+
+  /* Port table */
+  .port-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 0.9rem;
+  }
+  .port-table th {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .port-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .port-table tr:last-child td { border-bottom: none; }
+  .port-table code {
+    background: rgba(108,140,255,0.1);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+
+  /* SVG animations */
+  @keyframes flowRight {
+    0% { offset-distance: 0%; opacity: 0; }
+    5% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { offset-distance: 100%; opacity: 0; }
+  }
+  @keyframes flowLeft {
+    0% { offset-distance: 100%; opacity: 0; }
+    5% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { offset-distance: 0%; opacity: 0; }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+  @keyframes watchPulse {
+    0%, 100% { r: 4; opacity: 0.8; }
+    50% { r: 7; opacity: 0.3; }
+  }
+  @keyframes dashMove {
+    to { stroke-dashoffset: -20; }
+  }
+  @keyframes fadeInOut {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.8; }
+  }
+
+  .packet {
+    offset-distance: 0%;
+    animation: flowRight 2.5s linear infinite;
+  }
+  .packet-reverse {
+    offset-distance: 100%;
+    animation: flowLeft 2.5s linear infinite;
+  }
+  .watch-dot {
+    animation: watchPulse 2s ease-in-out infinite;
+  }
+  .dashed-animated {
+    stroke-dasharray: 8 6;
+    animation: dashMove 1s linear infinite;
+  }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    header h1 { font-size: 1.6rem; }
+    .step-card { grid-template-columns: 36px 1fr; gap: 12px; }
+    .step-num { width: 36px; height: 36px; font-size: 0.85rem; }
+    .diagram-wrap { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <h1>Traefik <span>Gateway API</span> Traffic Flow</h1>
+    <p>An animated guide to how Kubernetes Gateway API objects configure Traefik (control plane) and how HTTP requests travel through the stack (data plane).</p>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 1 — CONTROL PLANE
+     ═══════════════════════════════════════════════ -->
+<section id="control-plane">
+  <div class="container">
+    <h2><span class="badge badge-control">Control Plane</span> Building the Routing Table</h2>
+    <p class="section-desc">Traefik's <code>kubernetesGateway</code> provider watches the Kubernetes API for Gateway API objects and translates them into its internal routing table. No restart needed — changes reconcile automatically.</p>
+
+    <div class="diagram-wrap">
+      <svg id="svg-control" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background: K8s API Server box -->
+        <rect x="30" y="20" width="500" height="380" rx="12" fill="none" stroke="#2a2d3a" stroke-width="1.5"/>
+        <text x="50" y="50" fill="#8b8fa3" font-size="12" font-weight="600" font-family="system-ui" letter-spacing="0.05em">KUBERNETES API SERVER</text>
+
+        <!-- GatewayClass -->
+        <rect x="70" y="80" width="200" height="64" rx="8" fill="rgba(108,140,255,0.1)" stroke="#6c8cff" stroke-width="1.5"/>
+        <text x="170" y="106" text-anchor="middle" fill="#6c8cff" font-size="12" font-weight="700" font-family="system-ui">GatewayClass</text>
+        <text x="170" y="126" text-anchor="middle" fill="#8b8fa3" font-size="11" font-family="monospace">"traefik"</text>
+
+        <!-- Arrow GatewayClass → Gateway -->
+        <line x1="170" y1="144" x2="170" y2="180" stroke="#3a3d4a" stroke-width="1.5" marker-end="url(#arrowGray)"/>
+
+        <!-- Gateway -->
+        <rect x="70" y="180" width="200" height="80" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+        <text x="170" y="208" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="700" font-family="system-ui">Gateway</text>
+        <text x="170" y="226" text-anchor="middle" fill="#8b8fa3" font-size="11" font-family="monospace">"traefik-gateway"</text>
+        <text x="170" y="244" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">listener: web, port 8000</text>
+
+        <!-- Arrow Gateway → HTTPRoute -->
+        <line x1="170" y1="260" x2="170" y2="296" stroke="#3a3d4a" stroke-width="1.5" marker-end="url(#arrowGray)"/>
+
+        <!-- HTTPRoute -->
+        <rect x="70" y="296" width="200" height="80" rx="8" fill="rgba(251,146,60,0.1)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="170" y="324" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="700" font-family="system-ui">HTTPRoute</text>
+        <text x="170" y="342" text-anchor="middle" fill="#8b8fa3" font-size="11" font-family="monospace" id="route-name">"whoami-host"</text>
+        <text x="170" y="358" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace" id="route-detail">Host: whoami.localhost → whoami-v1:80</text>
+
+        <!-- Traefik box -->
+        <rect x="600" y="80" width="260" height="300" rx="12" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="730" y="110" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="700" font-family="system-ui">TRAEFIK</text>
+
+        <!-- Watch arrows (dashed, animated) -->
+        <!-- GatewayClass watch -->
+        <path id="watch1" d="M 270 112 C 400 112, 500 112, 600 130" fill="none" stroke="#6c8cff" stroke-width="1.2" class="dashed-animated" opacity="0.6"/>
+        <circle r="5" fill="#6c8cff" class="watch-dot">
+          <animateMotion dur="2s" repeatCount="indefinite" path="M 270 112 C 400 112, 500 112, 600 130"/>
+        </circle>
+
+        <!-- Gateway watch -->
+        <path id="watch2" d="M 270 220 C 420 220, 520 200, 600 200" fill="none" stroke="#4ade80" stroke-width="1.2" class="dashed-animated" opacity="0.6" style="animation-delay: 0.6s"/>
+        <circle r="5" fill="#4ade80" class="watch-dot" style="animation-delay: 0.6s">
+          <animateMotion dur="2s" repeatCount="indefinite" path="M 270 220 C 420 220, 520 200, 600 200" begin="0.6s"/>
+        </circle>
+
+        <!-- HTTPRoute watch -->
+        <path id="watch3" d="M 270 336 C 420 336, 520 300, 600 280" fill="none" stroke="#fb923c" stroke-width="1.2" class="dashed-animated" opacity="0.6" style="animation-delay: 1.2s"/>
+        <circle r="5" fill="#fb923c" class="watch-dot" style="animation-delay: 1.2s">
+          <animateMotion dur="2s" repeatCount="indefinite" path="M 270 336 C 420 336, 520 300, 600 280" begin="1.2s"/>
+        </circle>
+
+        <!-- Traefik internals -->
+        <text x="730" y="142" text-anchor="middle" fill="#8b8fa3" font-size="11" font-family="system-ui">watch loop</text>
+
+        <!-- Routing table inside Traefik -->
+        <rect x="625" y="160" width="210" height="40" rx="6" fill="rgba(108,140,255,0.08)" stroke="#6c8cff" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="730" y="178" text-anchor="middle" fill="#6c8cff" font-size="10" font-weight="600" font-family="system-ui">Accepted GatewayClass</text>
+        <text x="730" y="193" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">controllerName: traefik.io/gateway-controller</text>
+
+        <rect x="625" y="210" width="210" height="40" rx="6" fill="rgba(74,222,128,0.08)" stroke="#4ade80" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="730" y="228" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="600" font-family="system-ui">Programmed Listener</text>
+        <text x="730" y="243" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">web:8000 — allowedRoutes: All</text>
+
+        <rect x="625" y="260" width="210" height="55" rx="6" fill="rgba(251,146,60,0.08)" stroke="#fb923c" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="730" y="278" text-anchor="middle" fill="#fb923c" font-size="10" font-weight="600" font-family="system-ui">Router Rule</text>
+        <text x="730" y="293" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace" id="traefik-rule">Host(`whoami.localhost`)</text>
+        <text x="730" y="306" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace" id="traefik-backends">→ pods [10.244.0.5, 10.244.0.9]</text>
+
+        <!-- EndpointSlice note -->
+        <rect x="625" y="328" width="210" height="36" rx="6" fill="rgba(192,132,252,0.08)" stroke="#c084fc" stroke-width="1"/>
+        <text x="730" y="344" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="600" font-family="system-ui">EndpointSlice → direct pod IPs</text>
+        <text x="730" y="358" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">bypasses kube-proxy / ClusterIP</text>
+
+        <!-- Watch label -->
+        <text x="440" y="100" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui" font-style="italic">watches &amp; reconciles</text>
+
+        <!-- Arrow markers -->
+        <defs>
+          <marker id="arrowGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a3d4a"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+
+    <div class="steps">
+      <div class="step-card">
+        <div class="step-num step-num-control">1</div>
+        <div>
+          <h3>GatewayClass accepted</h3>
+          <p>Traefik sees a GatewayClass whose <code>controllerName</code> matches <code>traefik.io/gateway-controller</code> and marks it <strong>Accepted</strong>.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-control">2</div>
+        <div>
+          <h3>Gateway listener programmed</h3>
+          <p>Traefik opens a listener on its internal port <code>8000</code> (the "web" entrypoint) and marks the Gateway <strong>Programmed</strong>. <code>allowedRoutes: All</code> lets HTTPRoutes from any namespace attach.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-control">3</div>
+        <div>
+          <h3>HTTPRoute reconciled</h3>
+          <p>Traefik reads the <code>parentRef</code>, resolves the backend Service to pod IPs via <strong>EndpointSlices</strong> (bypassing kube-proxy entirely), and adds the rule to its router: <code>Host(`whoami.localhost`) &rarr; pods</code>.</p>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num step-num-control">4</div>
+        <div>
+          <h3>Continuous reconciliation</h3>
+          <p>Every time a pod is added/removed or an HTTPRoute changes, Traefik reconciles its routing table automatically. No restart or config reload needed.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 2 — DATA PLANE
+     ═══════════════════════════════════════════════ -->
+<section id="data-plane">
+  <div class="container">
+    <h2><span class="badge badge-data">Data Plane</span> The Request Journey</h2>
+    <p class="section-desc">Follow an HTTP request from <code>curl</code> on your machine through Docker, kind, Kubernetes, Traefik, and finally to the backend pod. Each boundary performs a port/address translation.</p>
+
+    <div class="controls">
+      <button class="btn active" onclick="setMode('auto')" id="btn-auto">Auto-play</button>
+      <button class="btn" onclick="setMode('step')" id="btn-step">Step-through</button>
+      <button class="btn" onclick="prevStep()" id="btn-prev" style="display:none">&larr; Prev</button>
+      <button class="btn" onclick="nextStep()" id="btn-next" style="display:none">Next &rarr;</button>
+      <span id="step-indicator" style="display:none;align-self:center;color:var(--text-muted);font-size:0.85rem;margin-left:8px"></span>
+    </div>
+
+    <div class="diagram-wrap">
+      <svg id="svg-data" viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#4ade80"/>
+          </marker>
+          <marker id="arrowCyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#22d3ee"/>
+          </marker>
+          <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#fb923c"/>
+          </marker>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Layer labels (left side) -->
+        <text x="16" y="60" fill="#8b8fa3" font-size="9" font-weight="600" font-family="system-ui" letter-spacing="0.06em" transform="rotate(-90 16 60)">HOST</text>
+        <text x="16" y="195" fill="#8b8fa3" font-size="9" font-weight="600" font-family="system-ui" letter-spacing="0.06em" transform="rotate(-90 16 195)">DOCKER</text>
+        <text x="16" y="315" fill="#8b8fa3" font-size="9" font-weight="600" font-family="system-ui" letter-spacing="0.06em" transform="rotate(-90 16 315)">K8S NODE</text>
+        <text x="16" y="460" fill="#8b8fa3" font-size="9" font-weight="600" font-family="system-ui" letter-spacing="0.06em" transform="rotate(-90 16 460)">POD</text>
+
+        <!-- Layer boundary lines -->
+        <line x1="35" y1="110" x2="880" y2="110" stroke="#2a2d3a" stroke-width="1" stroke-dasharray="6 4"/>
+        <line x1="35" y1="230" x2="880" y2="230" stroke="#2a2d3a" stroke-width="1" stroke-dasharray="6 4"/>
+        <line x1="35" y1="380" x2="880" y2="380" stroke="#2a2d3a" stroke-width="1" stroke-dasharray="6 4"/>
+
+        <!-- ── Step 1: Client ── -->
+        <g class="data-step" data-step="1">
+          <rect x="60" y="30" width="180" height="60" rx="8" fill="rgba(108,140,255,0.1)" stroke="#6c8cff" stroke-width="1.5"/>
+          <text x="150" y="56" text-anchor="middle" fill="#6c8cff" font-size="13" font-weight="700" font-family="system-ui">curl / browser</text>
+          <text x="150" y="74" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">whoami.localhost → 127.0.0.1</text>
+        </g>
+
+        <!-- DNS note -->
+        <g class="data-step" data-step="1">
+          <rect x="280" y="38" width="200" height="44" rx="6" fill="rgba(250,204,21,0.06)" stroke="#facc15" stroke-width="1" opacity="0.8"/>
+          <text x="380" y="57" text-anchor="middle" fill="#facc15" font-size="10" font-weight="600" font-family="system-ui">Step 1: /etc/hosts lookup</text>
+          <text x="380" y="72" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">whoami.localhost → 127.0.0.1</text>
+        </g>
+
+        <!-- Arrow 1→2 -->
+        <g class="data-step" data-step="2">
+          <path id="path-1-2" d="M 150 90 L 150 140" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowGreen)"/>
+          <rect x="165" y="98" width="80" height="18" rx="4" fill="var(--bg)"/>
+          <text x="205" y="111" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="600" font-family="monospace">:80</text>
+        </g>
+
+        <!-- ── Step 2-3: Docker DNAT ── -->
+        <g class="data-step" data-step="3">
+          <rect x="60" y="140" width="280" height="70" rx="8" fill="rgba(251,146,60,0.08)" stroke="#fb923c" stroke-width="1.5"/>
+          <text x="200" y="166" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="700" font-family="system-ui">Docker DNAT (extraPortMappings)</text>
+          <text x="200" y="184" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">127.0.0.1:80 → kind-node:80</text>
+          <text x="200" y="199" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui">iptables destination rewrite</text>
+        </g>
+
+        <!-- Arrow 3→4 -->
+        <g class="data-step" data-step="4">
+          <path id="path-3-4" d="M 200 210 L 200 255" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowGreen)"/>
+          <rect x="215" y="218" width="80" height="18" rx="4" fill="var(--bg)"/>
+          <text x="255" y="231" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="600" font-family="monospace">:80</text>
+        </g>
+
+        <!-- ── Step 4: Kubernetes hostPort ── -->
+        <g class="data-step" data-step="4">
+          <rect x="60" y="255" width="280" height="70" rx="8" fill="rgba(192,132,252,0.08)" stroke="#c084fc" stroke-width="1.5"/>
+          <text x="200" y="281" text-anchor="middle" fill="#c084fc" font-size="12" font-weight="700" font-family="system-ui">Kubernetes hostPort DNAT</text>
+          <text x="200" y="299" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">node:80 → traefik-pod:8000</text>
+          <text x="200" y="314" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui">kubelet / CNI iptables rule</text>
+        </g>
+
+        <!-- Arrow 4→5 -->
+        <g class="data-step" data-step="5">
+          <path id="path-4-5" d="M 200 325 L 200 400" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowGreen)"/>
+          <rect x="215" y="348" width="80" height="18" rx="4" fill="var(--bg)"/>
+          <text x="255" y="361" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="600" font-family="monospace">:8000</text>
+        </g>
+
+        <!-- ── Step 5-6: Traefik ── -->
+        <g class="data-step" data-step="5">
+          <rect x="60" y="400" width="380" height="100" rx="10" fill="rgba(34,211,238,0.06)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="250" y="425" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="700" font-family="system-ui">Traefik (web entrypoint :8000)</text>
+
+          <!-- Routing table mini-diagram -->
+          <rect x="80" y="440" width="170" height="44" rx="5" fill="rgba(108,140,255,0.08)" stroke="#6c8cff" stroke-width="1"/>
+          <text x="165" y="458" text-anchor="middle" fill="#6c8cff" font-size="10" font-weight="600" font-family="system-ui">Routing Table Lookup</text>
+          <text x="165" y="474" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">Host header → rule match</text>
+
+          <text x="275" y="462" text-anchor="middle" fill="#3a3d4a" font-size="18" font-family="system-ui">→</text>
+
+          <rect x="290" y="440" width="130" height="44" rx="5" fill="rgba(192,132,252,0.08)" stroke="#c084fc" stroke-width="1"/>
+          <text x="355" y="458" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="600" font-family="system-ui">EndpointSlice</text>
+          <text x="355" y="474" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">round-robin pod IPs</text>
+        </g>
+
+        <!-- Arrow Traefik → Backend pod -->
+        <g class="data-step" data-step="6">
+          <path id="path-5-6" d="M 440 460 C 500 460, 540 460, 570 460" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowCyan)"/>
+          <rect x="475" y="440" width="70" height="18" rx="4" fill="var(--bg)"/>
+          <text x="510" y="453" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600" font-family="monospace">:80</text>
+          <text x="510" y="473" text-anchor="middle" fill="#8b8fa3" font-size="8" font-family="system-ui">direct pod IP</text>
+        </g>
+
+        <!-- ── Step 7: Backend Pod ── -->
+        <g class="data-step" data-step="7">
+          <rect x="580" y="420" width="200" height="80" rx="10" fill="rgba(74,222,128,0.08)" stroke="#4ade80" stroke-width="1.5"/>
+          <text x="680" y="450" text-anchor="middle" fill="#4ade80" font-size="12" font-weight="700" font-family="system-ui">whoami pod</text>
+          <text x="680" y="468" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="monospace">10.244.0.5:80</text>
+          <text x="680" y="484" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="system-ui">namespace: demo</text>
+        </g>
+
+        <!-- ── Step 8: Response path (reverse) ── -->
+        <g class="data-step" data-step="8">
+          <path id="path-response" d="M 780 460 C 820 460, 840 400, 850 300 C 860 200, 850 100, 830 60" fill="none" stroke="#f87171" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowResponse)" opacity="0.6"/>
+          <text x="865" y="240" fill="#f87171" font-size="10" font-weight="600" font-family="system-ui" transform="rotate(90 865 240)">response</text>
+          <marker id="arrowResponse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#f87171"/>
+          </marker>
+        </g>
+
+        <!-- Forwarded headers annotation -->
+        <g class="data-step" data-step="7">
+          <rect x="560" y="330" width="230" height="70" rx="6" fill="rgba(250,204,21,0.05)" stroke="#facc15" stroke-width="1" opacity="0.7"/>
+          <text x="675" y="350" text-anchor="middle" fill="#facc15" font-size="10" font-weight="600" font-family="system-ui">Traefik adds headers:</text>
+          <text x="675" y="366" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">X-Forwarded-For: &lt;client IP&gt;</text>
+          <text x="675" y="380" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">X-Forwarded-Host: whoami.localhost</text>
+          <text x="675" y="394" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">X-Forwarded-Proto: http</text>
+        </g>
+
+        <!-- Animated request packet (auto mode) -->
+        <g id="auto-packets">
+          <!-- Packet going down the request path -->
+          <circle r="5" fill="#4ade80" filter="url(#glow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;1;1;1;1;1;1;0" dur="6s" repeatCount="indefinite"/>
+            <animateMotion dur="6s" repeatCount="indefinite"
+              path="M 150 80 L 150 160 L 200 175 L 200 290 L 200 400 L 200 460 L 440 460 L 580 460 L 680 460"
+              keyTimes="0;0.1;0.2;0.35;0.5;0.65;0.8;0.9;1"
+              keyPoints="0;0.1;0.2;0.35;0.5;0.65;0.8;0.9;1"/>
+          </circle>
+          <!-- Second packet with offset -->
+          <circle r="4" fill="#4ade80" filter="url(#glow)" opacity="0">
+            <animate attributeName="opacity" values="0;1;1;1;1;1;1;1;0" dur="6s" repeatCount="indefinite" begin="3s"/>
+            <animateMotion dur="6s" repeatCount="indefinite" begin="3s"
+              path="M 150 80 L 150 160 L 200 175 L 200 290 L 200 400 L 200 460 L 440 460 L 580 460 L 680 460"/>
+          </circle>
+          <!-- Response packet going up -->
+          <circle r="4" fill="#f87171" filter="url(#glow)" opacity="0">
+            <animate attributeName="opacity" values="0;0;0;0;0;0;0;1;1;1;0" dur="8s" repeatCount="indefinite"/>
+            <animateMotion dur="8s" repeatCount="indefinite"
+              path="M 780 460 C 820 460, 840 400, 850 300 C 860 200, 850 100, 830 60"/>
+          </circle>
+        </g>
+
+        <!-- Step-mode highlight (hidden by default) -->
+        <rect id="step-highlight" x="0" y="0" width="0" height="0" rx="12" fill="none" stroke="#6c8cff" stroke-width="2.5" opacity="0"/>
+      </svg>
+    </div>
+
+    <!-- Step descriptions -->
+    <div class="steps" id="data-steps">
+      <div class="step-card" data-step="1">
+        <div class="step-num step-num-data">1</div>
+        <div>
+          <h3>DNS resolution</h3>
+          <p><code>curl</code> resolves <code>whoami.localhost</code> via <code>/etc/hosts</code> &rarr; <code>127.0.0.1</code>. No DNS server involved; the entry was added by <code>setup.sh</code>.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="2">
+        <div class="step-num step-num-data">2</div>
+        <div>
+          <h3>TCP connection to localhost:80</h3>
+          <p><code>curl</code> opens a TCP connection to <code>127.0.0.1:80</code>.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="3">
+        <div class="step-num step-num-data">3</div>
+        <div>
+          <h3>Docker port mapping (extraPortMappings)</h3>
+          <p>The kind node is a Docker container. Docker's iptables DNAT rule rewrites the destination: <code>127.0.0.1:80 &rarr; kind-node-IP:80</code>. Created by <code>extraPortMappings</code> in <code>kind/cluster.yaml</code>.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="4">
+        <div class="step-num step-num-data">4</div>
+        <div>
+          <h3>Kubernetes hostPort DNAT</h3>
+          <p>Inside the kind node, kubelet/CNI rewrites the destination again: <code>node:80 &rarr; traefik-pod:8000</code>. The Traefik DaemonSet declares <code>hostPort: 80</code> mapping to <code>containerPort: 8000</code>.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="5">
+        <div class="step-num step-num-data">5</div>
+        <div>
+          <h3>Traefik receives the request</h3>
+          <p>Traefik reads the <code>Host: whoami.localhost</code> header and looks it up in its routing table. It finds the rule built from the <code>whoami-host</code> HTTPRoute.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="6">
+        <div class="step-num step-num-data">6</div>
+        <div>
+          <h3>Backend pod selection</h3>
+          <p>Traefik has resolved the backend Service to pod IPs via EndpointSlices (e.g. <code>10.244.0.5</code>, <code>10.244.0.9</code>). It round-robins between them and opens a direct TCP connection to <code>pod-IP:80</code>, <strong>bypassing kube-proxy entirely</strong>.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="7">
+        <div class="step-num step-num-data">7</div>
+        <div>
+          <h3>Request forwarded with headers</h3>
+          <p>Traefik proxies the request to the pod, adding <code>X-Forwarded-For</code>, <code>X-Forwarded-Host</code>, <code>X-Forwarded-Proto</code>, and <code>X-Real-Ip</code> headers.</p>
+        </div>
+      </div>
+      <div class="step-card" data-step="8">
+        <div class="step-num step-num-data">8</div>
+        <div>
+          <h3>Response returns</h3>
+          <p>The pod sends its response back to Traefik, which forwards it to <code>curl</code>. Connections may be kept alive for reuse.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Port table -->
+    <table class="port-table">
+      <thead>
+        <tr><th>Layer</th><th>Port</th><th>Why</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>/etc/hosts + curl</td><td><code>80</code></td><td>Standard HTTP port</td></tr>
+        <tr><td>Docker extraPortMappings</td><td><code>80 &rarr; 80</code></td><td>kind maps host:80 to node-container:80</td></tr>
+        <tr><td>Kubernetes hostPort</td><td><code>80 &rarr; 8000</code></td><td>Traefik's "web" entrypoint is on 8000 internally</td></tr>
+        <tr><td>Gateway listener</td><td><code>8000</code></td><td>Must match Traefik's entrypoint, not the host-facing port</td></tr>
+        <tr><td>HTTPRoute parentRef</td><td>(no port)</td><td>Attaches to the named listener "web" on the Gateway</td></tr>
+        <tr><td>Backend Service</td><td><code>80</code></td><td>The ClusterIP Service port for whoami pods</td></tr>
+        <tr><td>Pod containerPort</td><td><code>80</code></td><td>The port the whoami process listens on</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 3 — HOW THEY CONNECT
+     ═══════════════════════════════════════════════ -->
+<section id="connection">
+  <div class="container">
+    <h2><span class="badge badge-connect">Link</span> How the Two Planes Interlock</h2>
+    <p class="section-desc">The control plane and data plane aren't independent — the control plane builds the routing table that the data plane relies on at runtime.</p>
+
+    <div class="connection-box">
+      <p><strong>The control plane builds the map.</strong> Traefik continuously watches Gateway API objects and EndpointSlices, assembling an in-memory routing table that maps hostnames and paths to live pod IPs.</p>
+      <p><strong>The data plane reads the map.</strong> When a request arrives at Step 5, Traefik consults this routing table to decide which pod gets the traffic (Step 6). Without the control plane's reconciliation loop, Traefik would have no rules and return 404.</p>
+      <p><strong>The link is live.</strong> If you scale a Deployment or change an HTTPRoute, the control plane updates the routing table within seconds. The very next request on the data plane uses the new configuration — zero downtime, no restarts.</p>
+    </div>
+
+    <div class="diagram-wrap" style="margin-top: 24px">
+      <svg viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg">
+        <!-- Control plane box -->
+        <rect x="40" y="20" width="340" height="160" rx="10" fill="rgba(108,140,255,0.06)" stroke="#6c8cff" stroke-width="1.5"/>
+        <text x="210" y="50" text-anchor="middle" fill="#6c8cff" font-size="13" font-weight="700" font-family="system-ui">Control Plane</text>
+        <text x="210" y="75" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">GatewayClass + Gateway + HTTPRoute</text>
+        <text x="210" y="95" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">+ EndpointSlice watching</text>
+
+        <rect x="100" y="115" width="220" height="44" rx="6" fill="rgba(108,140,255,0.12)" stroke="#6c8cff" stroke-width="1"/>
+        <text x="210" y="138" text-anchor="middle" fill="#6c8cff" font-size="11" font-weight="600" font-family="system-ui">Routing Table</text>
+        <text x="210" y="153" text-anchor="middle" fill="#8b8fa3" font-size="9" font-family="monospace">host/path rules → pod IPs</text>
+
+        <!-- Arrow connecting the planes -->
+        <path d="M 380 137 C 440 137, 460 100, 520 100" fill="none" stroke="#c084fc" stroke-width="2" marker-end="url(#arrowPurple)"/>
+        <text x="450" y="95" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="600" font-family="system-ui">feeds into</text>
+        <circle r="4" fill="#c084fc" filter="url(#glow)">
+          <animateMotion dur="2s" repeatCount="indefinite" path="M 380 137 C 440 137, 460 100, 520 100"/>
+        </circle>
+        <marker id="arrowPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#c084fc"/>
+        </marker>
+
+        <!-- Data plane box -->
+        <rect x="520" y="20" width="340" height="160" rx="10" fill="rgba(74,222,128,0.06)" stroke="#4ade80" stroke-width="1.5"/>
+        <text x="690" y="50" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="700" font-family="system-ui">Data Plane</text>
+        <text x="690" y="75" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">HTTP request → Traefik → pod</text>
+
+        <text x="690" y="110" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">Step 5: read Host header</text>
+        <text x="690" y="128" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="600" font-family="system-ui">look up in routing table</text>
+        <text x="690" y="148" text-anchor="middle" fill="#8b8fa3" font-size="10" font-family="system-ui">Step 6: pick pod IP, forward</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<footer style="text-align:center;padding:40px 0;color:var(--text-muted);font-size:0.85rem;border-top:1px solid var(--border)">
+  <div class="container">
+    Traefik Gateway API Demo &mdash; self-contained tutorial, no external dependencies
+  </div>
+</footer>
+
+<script>
+// ── Step-through mode for Data Plane diagram ──
+let mode = 'auto';
+let currentStep = 1;
+const totalSteps = 8;
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-auto').classList.toggle('active', m === 'auto');
+  document.getElementById('btn-step').classList.toggle('active', m === 'step');
+  document.getElementById('btn-prev').style.display = m === 'step' ? '' : 'none';
+  document.getElementById('btn-next').style.display = m === 'step' ? '' : 'none';
+  document.getElementById('step-indicator').style.display = m === 'step' ? '' : 'none';
+  document.getElementById('auto-packets').style.display = m === 'auto' ? '' : 'none';
+
+  if (m === 'step') {
+    currentStep = 1;
+    highlightStep(currentStep);
+  } else {
+    clearHighlights();
+  }
+}
+
+function nextStep() {
+  if (currentStep < totalSteps) { currentStep++; highlightStep(currentStep); }
+}
+function prevStep() {
+  if (currentStep > 1) { currentStep--; highlightStep(currentStep); }
+}
+
+function highlightStep(step) {
+  document.getElementById('step-indicator').textContent = 'Step ' + step + ' / ' + totalSteps;
+
+  // Highlight SVG groups
+  document.querySelectorAll('#svg-data .data-step').forEach(g => {
+    const s = parseInt(g.getAttribute('data-step'));
+    g.style.opacity = s <= step ? '1' : '0.15';
+    g.style.transition = 'opacity 0.3s';
+  });
+
+  // Highlight step cards
+  document.querySelectorAll('#data-steps .step-card').forEach(card => {
+    const s = parseInt(card.getAttribute('data-step'));
+    card.classList.toggle('active', s === step);
+    card.style.opacity = s <= step ? '1' : '0.3';
+    card.style.transition = 'opacity 0.3s';
+  });
+
+  // Scroll active card into view
+  const activeCard = document.querySelector('#data-steps .step-card.active');
+  if (activeCard) activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function clearHighlights() {
+  document.querySelectorAll('#svg-data .data-step').forEach(g => {
+    g.style.opacity = '1';
+    g.style.transition = 'opacity 0.3s';
+  });
+  document.querySelectorAll('#data-steps .step-card').forEach(card => {
+    card.classList.remove('active');
+    card.style.opacity = '1';
+    card.style.transition = 'opacity 0.3s';
+  });
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (mode !== 'step') return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); nextStep(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prevStep(); }
+});
+</script>
+</body>
+</html>
